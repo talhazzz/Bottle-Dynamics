@@ -1,0 +1,21 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Environment variables and secrets
+.env
+
+# Training outputs
+logs/
+checkpoints/
+recordings/
+tensorboard/
+
+# Editor and operating system
+.vscode/
+.DS_Store
+Thumbs.db
