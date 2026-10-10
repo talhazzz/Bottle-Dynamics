@@ -1,0 +1,6 @@
+checkpoint,episodes,successes,success_rate_pct,mean_reward,mean_flight_rotation_deg,mean_first_contact_angle_error_deg,mean_first_contact_angular_velocity_rad_s,outcomes
+bottle_ppo_5000_steps.zip,1,0,0.0,-8.319151440762928,0.0,,,failed_to_release: 1
+bottle_ppo_10000_steps.zip,1,0,0.0,-8.122495412432864,0.0,,,failed_to_release: 1
+bottle_ppo_15000_steps.zip,1,0,0.0,-7.163713755279603,124.35231496717786,25.966386281764727,-1.8566003678967142,unstable_landing: 1
+bottle_ppo_20000_steps.zip,1,0,0.0,-7.122264209339667,295.5075392464174,77.6315736313751,8.27926415924968,side_landing: 1
+bottle_ppo_final.zip,1,0,0.0,-7.158375732241999,330.91440308086976,76.46208528520975,8.72007691557205,side_landing: 1
