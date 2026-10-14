@@ -7,7 +7,6 @@ from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
 
-# Add the project root so bottle_env.py can be imported when this file is run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import bottle_env  # Registers BottleDynamics-v0.
 
@@ -43,9 +42,9 @@ def main():
             seed=args.seed,
             device="cpu",
             learning_rate=3e-4,
-                    buffer_size=100_000,
-                    learning_starts=5_000,
-                    batch_size=256,
+                        buffer_size=100_000,
+                        learning_starts=5_000,
+                        batch_size=256,
         )
         checkpoint_callback = CheckpointCallback(
             save_freq=args.checkpoint_every,
