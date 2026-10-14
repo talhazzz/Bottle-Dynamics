@@ -21,9 +21,35 @@ py -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
+## Files
+
+Each algorithm folder has its own, self-contained `train.py` and `evaluate.py`, similar to a basic Stable-Baselines3 example. The scripts directly create or load the model, run episodes, print results, and write TensorBoard metrics. PPO, A2C, and SAC outputs are kept separate.
+
+```text
+PPO/
+  train.py
+  evaluate.py
+  runs/
+A2C/
+  train.py
+  evaluate.py
+  runs/
+SAC/
+  train.py
+  evaluate.py
+  runs/
+bottle_env.py
+```
+
 ## Train
 
-Each algorithm has its own folder and its own `train.py` and `evaluate.py`.
+The default training budget is 500,000 timesteps, with a checkpoint saved every 10,000 steps and seed 42. Start with a short smoke test:
+
+```powershell
+python PPO/train.py --timesteps 2000 --checkpoint-every 1000 --run-name test_run
+```
+
+For longer runs:
 
 ```powershell
 python PPO/train.py --timesteps 500000 --checkpoint-every 10000
@@ -31,41 +57,48 @@ python A2C/train.py --timesteps 500000 --checkpoint-every 10000
 python SAC/train.py --timesteps 500000 --checkpoint-every 10000
 ```
 
-Each command performs **one continuous training run**. At each checkpoint interval the current model is saved while learning continues; training is not reset or split into separate runs. A 500,000-step run saved every 10,000 steps produces around 50 checkpoint files, plus `final_model.zip`.
+Each command performs one continuous training run. Checkpoints are saved while learning continues, followed by `final_model.zip`. For example, PPO writes to `PPO/runs/seed42/`, including:
 
-Outputs are separated by algorithm. For example, PPO writes to `PPO/runs/seed42/`. Use `--seed 123` or `--run-name experiment2` to create another run. The trainer refuses to overwrite a non-empty run directory.
+- `checkpoints/` — periodic model snapshots
+- `tensorboard/` — Stable-Baselines3 training metrics
+- `final_model.zip` — model saved at the end
+
+Use `--seed 123` or `--run-name experiment2` to create a different run. A script refuses to overwrite a non-empty run folder; choose a new name for a new experiment.
 
 ## TensorBoard
 
-Open the run’s log folder, for example:
+For example, to view PPO's training metrics:
 
 ```powershell
 tensorboard --logdir PPO/runs/seed42/tensorboard
 ```
 
-Only these two scalar metrics are written:
+Open the local URL printed by TensorBoard. For A2C or SAC, use that algorithm's matching folder.
 
-- `rollout/ep_rew_mean` — mean reward over the last 100 completed episodes.
-- `rollout/ep_len_mean` — mean number of agent decisions per episode over the last 100 completed episodes.
+## Evaluate
 
-Checkpoint and evaluation details are stored in files, not as extra TensorBoard metrics.
-
-## Evaluate and replay checkpoints
-
-Evaluate every checkpoint on the same set of episode seeds:
+By default, evaluation loads the final model and runs five episodes, following the same basic loop as the standalone A2C evaluation example:
 
 ```powershell
-python PPO/evaluate.py --run-name seed42 --episodes 20
+python PPO/evaluate.py --run-name seed42 --episodes 5
 ```
 
-The script writes `evaluation_results.csv` and ranks candidates by success rate, then mean reward. Replay one chosen checkpoint:
+Each episode prints its reward, length, termination status, success flag, and outcome. The script writes summary results to `evaluation_results.csv` and evaluation metrics under `evaluation_tensorboard/` within that run folder.
+
+Evaluate all periodic checkpoints plus the final model:
+
+```powershell
+python PPO/evaluate.py --run-name seed42 --episodes 5 --all-checkpoints
+```
+
+Evaluate and replay one specific checkpoint (only one model can be rendered at a time):
 
 ```powershell
 python PPO/evaluate.py --run-name seed42 --model PPO/runs/seed42/checkpoints/ppo_10000_steps.zip --episodes 1 --render
 ```
 
-Use the matching folder for A2C or SAC. For example, `python SAC/evaluate.py --run-name seed42 --episodes 20`.
+Use `A2C/evaluate.py` or `SAC/evaluate.py` for the other algorithms, with their matching run folders. Evaluation uses the same episode seeds across models to make comparisons more consistent.
 
 ## Fair comparison
 
-Train PPO, A2C, and SAC using the same environment, timestep budget, and seed before comparing them. Evaluate checkpoints on identical seeds. The older experiments used a different environment version, so their scores should be treated as historical baselines, not direct apples-to-apples comparisons.
+Train PPO, A2C, and SAC using the same environment, timestep budget, and seed before comparing them. The older experiments used a different environment version, so their scores should be treated as historical baselines, not direct apples-to-apples comparisons.
