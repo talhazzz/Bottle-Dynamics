@@ -1,44 +1,71 @@
 # Bottle-Dynamics
 
-A custom, physics-based reinforcement learning environment for bottle-flip control.
+A small custom bottle-flip environment using Gymnasium, Pymunk, and Stable-Baselines3.
 
-## Overview
+## Environment
 
-Bottle-Dynamics explores how reinforcement learning agents can learn to execute bottle flips and achieve stable, upright landings through trial and error.
+- The bottle is a rigid 2D rectangle standing in for an **empty reusable plastic bottle**.
+- Bottle mass is an initial estimate of **0.12 kg**, not a measured value.
+- The bottle swings from a pivot; the agent controls torque and chooses when to release.
+- After release, Pymunk simulates free flight and collisions with a **continuous ground surface**.
+- The green strip marks the target zone on the ground; it is not a separate floating platform.
+- Water/sloshing physics is disabled for this baseline.
 
-Using a 2D rigid-body physics simulation integrated with Gymnasium, the environment allows agents to learn launch strategies by controlling the forces and rotational impulses applied to a bottle.
+A success requires an upright, low-speed, stable landing in the target zone and enough rotation. Merely touching the floor does not count.
 
-The project investigates how different water-fill levels affect bottle dynamics and flipping performance, with experiments at **20%, 30%, and 40% water fill**.
+## Setup (Windows PowerShell)
 
-Trained agents will be evaluated across repeated trials, with model checkpoints saved at regular training intervals to identify the most reliable policies.
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
 
-A visualization interface will allow users to observe bottle trajectories, evaluate checkpoints, and compare reinforcement learning algorithms.
+## Train
 
-## Objectives
+Each algorithm has its own folder and its own `train.py` and `evaluate.py`.
 
-- Develop a custom 2D physics simulation for bottle-flip dynamics.
-- Implement a Gymnasium environment with a continuous action space.
-- Train reinforcement learning agents to achieve stable, upright landings.
-- Investigate the effects of 20%, 30%, and 40% water levels.
-- Save and evaluate model checkpoints at configurable training intervals.
-- Compare algorithms using landing success rates, accuracy, and stability.
-- Build an interactive interface for visualizing flips and comparing results.
+```powershell
+python PPO/train.py --timesteps 500000 --checkpoint-every 10000
+python A2C/train.py --timesteps 500000 --checkpoint-every 10000
+python SAC/train.py --timesteps 500000 --checkpoint-every 10000
+```
 
-## Technology Stack
+Each command performs **one continuous training run**. At each checkpoint interval the current model is saved while learning continues; training is not reset or split into separate runs. A 500,000-step run saved every 10,000 steps produces around 50 checkpoint files, plus `final_model.zip`.
 
-- Python — Core implementation
-- Gymnasium — Reinforcement learning environment
-- Pymunk — 2D rigid-body physics
-- Pygame — Visualization
-- Stable-Baselines3 — Reinforcement learning algorithms
-- TensorBoard — Training metrics and experiment monitoring
+Outputs are separated by algorithm. For example, PPO writes to `PPO/runs/seed42/`. Use `--seed 123` or `--run-name experiment2` to create another run. The trainer refuses to overwrite a non-empty run directory.
 
-## Evaluation
+## TensorBoard
 
-Models will be evaluated across repeated episodes using metrics such as landing success rate, landing-angle error, residual angular velocity, and landing stability.
+Open the run’s log folder, for example:
 
-Checkpoint comparisons will help identify reliable policies rather than automatically selecting the final training model.
+```powershell
+tensorboard --logdir PPO/runs/seed42/tensorboard
+```
 
-## Project Status
+Only these two scalar metrics are written:
 
-Under development.
+- `rollout/ep_rew_mean` — mean reward over the last 100 completed episodes.
+- `rollout/ep_len_mean` — mean number of agent decisions per episode over the last 100 completed episodes.
+
+Checkpoint and evaluation details are stored in files, not as extra TensorBoard metrics.
+
+## Evaluate and replay checkpoints
+
+Evaluate every checkpoint on the same set of episode seeds:
+
+```powershell
+python PPO/evaluate.py --run-name seed42 --episodes 20
+```
+
+The script writes `evaluation_results.csv` and ranks candidates by success rate, then mean reward. Replay one chosen checkpoint:
+
+```powershell
+python PPO/evaluate.py --run-name seed42 --model PPO/runs/seed42/checkpoints/ppo_10000_steps.zip --episodes 1 --render
+```
+
+Use the matching folder for A2C or SAC. For example, `python SAC/evaluate.py --run-name seed42 --episodes 20`.
+
+## Fair comparison
+
+Train PPO, A2C, and SAC using the same environment, timestep budget, and seed before comparing them. Evaluate checkpoints on identical seeds. The older experiments used a different environment version, so their scores should be treated as historical baselines, not direct apples-to-apples comparisons.
