@@ -62,6 +62,7 @@ class BottleSwingEnv(gym.Env):
         self.net_rotation = self.swing_travel = self.flight_travel = 0.0
         self.max_swing_excursion = self.stable_time = self.landing_elapsed = 0.0
         self.ground_contact = self.first_contact = False
+        self.swing_ground_hit = False
         self.first_contact_angle_error = self.first_contact_omega = None
         self.first_contact_speed = self.first_contact_position = None
         self.first_contact_flight_rotation = self.first_contact_net_rotation = None
@@ -105,7 +106,11 @@ class BottleSwingEnv(gym.Env):
 
     def _on_ground_begin(self, arbiter, space, data):
         self.ground_contact = True
-        if not self.first_contact:
+        if self.phase == "swing":
+            # A collision before release means the swing hit the floor.
+            self.swing_ground_hit = True
+        elif not self.first_contact:
+            # Only flight contact counts as a landing attempt.
             self.first_contact = True
             self.first_contact_angle_error = self._upright_error()
             self.first_contact_omega = float(self.body.angular_velocity)
@@ -280,10 +285,16 @@ class BottleSwingEnv(gym.Env):
             self.space.step(self.PHYSICS_DT)
             self.swing_time += self.PHYSICS_DT
             self._track_rotation()
+            if self.swing_ground_hit:
+                break
         reward = self._swing_potential() - old_potential - 0.002 - 0.001 * float(torque_cmd) ** 2
         terminated = truncated = False
 
-        if release_cmd > 0:
+        if self.swing_ground_hit:
+            self.outcome = "swing_hit_ground"
+            reward -= 5.0
+            terminated = True
+        elif release_cmd > 0:
             if self.release_ready:
                 self.space.remove(self.pivot)
                 self.phase = "flight"
