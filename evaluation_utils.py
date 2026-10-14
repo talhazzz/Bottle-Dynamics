@@ -9,6 +9,8 @@ from statistics import mean
 
 import gymnasium as gym
 
+import bottle_env  # Registers BottleDynamics-v0.
+
 
 def step_number(path):
     match = re.search(r"_(\d+)_steps\.zip$", path.name)
