@@ -1,145 +1,101 @@
+
 import argparse
-import csv
-import re
 import sys
 from pathlib import Path
-from statistics import mean
 
 import gymnasium as gym
 from stable_baselines3 import PPO
 from torch.utils.tensorboard import SummaryWriter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import bottle_env  # Registers BottleDynamics-v0.
+import bottle_env
 
 
-def checkpoint_step(path):
-    match = re.search(r"_(\d+)_steps\.zip$", path.name)
-    return int(match.group(1)) if match else 10**18
+parser = argparse.ArgumentParser()
+parser.add_argument("--run-name", default="ppo_100k_tensorboard")
+parser.add_argument("--model", type=Path, help="Path to a checkpoint or best_model.zip")
+parser.add_argument("--episodes", type=int, default=5)
+parser.add_argument("--render", action="store_true")
+args = parser.parse_args()
 
+if args.episodes < 1:
+    parser.error("Episodes must be positive.")
 
-def evaluate_model(model_path, env, episodes, writer, tag):
-    model = PPO.load(str(model_path), device="cpu")
-    rewards, lengths, successes = [], [], []
+RUN_DIR = Path(__file__).resolve().parent / "runs" / args.run_name
 
-    for episode in range(episodes):
-        observation, _ = env.reset(seed=1000 + episode)
+# Use a specific model if supplied; otherwise use the final model.
+if args.model:
+    MODEL_PATH = args.model
+    if not MODEL_PATH.is_absolute():
+        MODEL_PATH = Path.cwd() / MODEL_PATH
+else:
+    MODEL_PATH = RUN_DIR / "final_model.zip"
+
+if not MODEL_PATH.is_file():
+    parser.error(f"Model not found: {MODEL_PATH}")
+
+env = gym.make(
+    "BottleDynamics-v0",
+    render_mode="human" if args.render else None,
+)
+model = PPO.load(str(MODEL_PATH), device="cpu")
+
+# Keep manual evaluation logs separate from training logs.
+writer = SummaryWriter(str(RUN_DIR / "tensorboard" / "manual_evaluation"))
+
+total_rewards = []
+successful_episodes = 0
+
+try:
+    for episode in range(args.episodes):
+        observation, info = env.reset(seed=1000 + episode)
         total_reward = 0.0
         step_count = 0
+        terminated = truncated = False
 
-        while True:
+        while not (terminated or truncated):
             action, _ = model.predict(observation, deterministic=True)
             observation, reward, terminated, truncated, info = env.step(action)
             total_reward += float(reward)
             step_count += 1
 
-            if env.render_mode == "human":
+            if args.render:
                 env.render()
                 if env.unwrapped.window_closed:
-                    print("Replay stopped by user.")
-                    return None
+                    print("Playback stopped by user.")
+                    break
 
-            if terminated or truncated:
-                break
+        if args.render and env.unwrapped.window_closed:
+            break
 
         success = bool(info.get("is_success", False))
-        rewards.append(total_reward)
-        lengths.append(step_count)
-        successes.append(success)
-        success_rate = sum(successes) / len(successes)
+        total_rewards.append(total_reward)
+        successful_episodes += int(success)
+        success_rate = successful_episodes / len(total_rewards)
 
         print(
-            f"Episode {episode + 1}: reward={total_reward:.2f}, "
-            f"steps={step_count}, terminated={terminated}, "
-            f"truncated={truncated}, success={success}"
+            f"Episode {episode + 1}: "
+            f"reward={total_reward:.2f}, "
+            f"steps={step_count}, "
+            f"success={success}"
         )
-        writer.add_scalar(f"{tag}/episode_reward", total_reward, episode + 1)
-        writer.add_scalar(f"{tag}/episode_length", step_count, episode + 1)
-        writer.add_scalar(f"{tag}/success_rate", success_rate, episode + 1)
 
-    row = {
-        "algorithm": "PPO",
-        "model": str(model_path),
-        "episodes": len(rewards),
-        "average_reward": mean(rewards),
-        "average_episode_length": mean(lengths),
-        "success_rate": sum(successes) / len(successes),
-        "successful_episodes": f"{sum(successes)}/{len(successes)}",
-    }
-    print("\n*** Evaluation summary ***")
-    print(f"Average reward: {row['average_reward']:.2f}")
-    print(f"Average episode length: {row['average_episode_length']:.1f}")
-    print(f"Success rate: {row['success_rate']:.0%}")
-    print(f"Successful episodes: {row['successful_episodes']}")
-    writer.add_scalar(f"{tag}/average_reward", row["average_reward"], len(rewards))
-    writer.add_scalar(f"{tag}/final_success_rate", row["success_rate"], len(rewards))
-    return row
+        writer.add_scalar("manual_eval/episode_reward", total_reward, episode + 1)
+        writer.add_scalar("manual_eval/episode_length", step_count, episode + 1)
+        writer.add_scalar("manual_eval/success_rate", success_rate, episode + 1)
 
+    if total_rewards:
+        average_reward = sum(total_rewards) / len(total_rewards)
+        success_rate = successful_episodes / len(total_rewards)
 
-def main():
-    parser = argparse.ArgumentParser(description="Evaluate a trained PPO model.")
-    parser.add_argument("--run-name", default="seed42")
-    parser.add_argument("--episodes", type=int, default=5)
-    parser.add_argument("--model", type=Path, help="Evaluate this model instead of final_model.zip.")
-    parser.add_argument("--all-checkpoints", action="store_true",
-                        help="Evaluate every checkpoint and the final model.")
-    parser.add_argument("--render", action="store_true", help="Show the Pygame simulation.")
-    args = parser.parse_args()
+        print("\n--- Evaluation Summary ---")
+        print(f"Model: {MODEL_PATH}")
+        print(f"Average reward: {average_reward:.2f}")
+        print(f"Success rate: {success_rate:.0%}")
+        print(f"Successful episodes: {successful_episodes}/{len(total_rewards)}")
 
-    if args.episodes < 1:
-        parser.error("--episodes must be positive.")
-    if args.model and args.all_checkpoints:
-        parser.error("Use either --model or --all-checkpoints, not both.")
-    if args.render and args.all_checkpoints:
-        parser.error("--render can only be used with one model.")
-
-    run_dir = Path(__file__).resolve().parent / "runs" / args.run_name
-    if args.model:
-        model_paths = [args.model if args.model.is_absolute() else Path.cwd() / args.model]
-        result_file = "selected_model_evaluation.csv"
-    elif args.all_checkpoints:
-        model_paths = sorted(
-            (run_dir / "checkpoints").glob("ppo_*_steps.zip"),
-            key=checkpoint_step,
-        )
-        final_model = run_dir / "final_model.zip"
-        if final_model.exists():
-            model_paths.append(final_model)
-        result_file = "evaluation_results.csv"
-    else:
-        model_paths = [run_dir / "final_model.zip"]
-        result_file = "evaluation_results.csv"
-
-    model_paths = [path.resolve() for path in model_paths if path.is_file()]
-    if not model_paths:
-        parser.error(f"No model found. Check the run folder: {run_dir}")
-
-    run_dir.mkdir(parents=True, exist_ok=True)
-    env = gym.make("BottleDynamics-v0", render_mode="human" if args.render else None)
-    rows = []
-    writer = SummaryWriter(str(run_dir / "evaluation_tensorboard"))
-
-    try:
-        for model_path in model_paths:
-            print(f"\nEvaluating {model_path.name} ...")
-            tag = "evaluation" if len(model_paths) == 1 else f"evaluation/{model_path.stem}"
-            result = evaluate_model(model_path, env, args.episodes, writer, tag)
-            if result is None:
-                break
-            rows.append(result)
-    finally:
-        writer.close()
-        env.close()
-
-    if rows:
-        output_path = run_dir / result_file
-        with output_path.open("w", newline="", encoding="utf-8") as file:
-            csv_writer = csv.DictWriter(file, fieldnames=rows[0].keys())
-            csv_writer.writeheader()
-            csv_writer.writerows(rows)
-        print(f"Results saved to {output_path}")
-        print(f"Evaluation TensorBoard logs: {run_dir / 'evaluation_tensorboard'}")
-
-
-if __name__ == "__main__":
-    main()
+        writer.add_scalar("manual_eval/average_reward", average_reward, len(total_rewards))
+        writer.add_scalar("manual_eval/final_success_rate", success_rate, len(total_rewards))
+finally:
+    writer.close()
+    env.close()
