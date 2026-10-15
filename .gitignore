@@ -1,21 +1,23 @@
-
 # Python
 __pycache__/
 *.py[cod]
 *.egg-info/
+
+# Virtual environments
 .venv/
 venv/
 
-# Environment variables and secrets
+# Secrets and local editor files
 .env
-
-# Training outputs
-logs/
-checkpoints/
-recordings/
-tensorboard/
-
-# Editor and operating system
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Training outputs (never commit large model files or TensorBoard event logs)
+runs/
+**/runs/
+logs/
+checkpoints/
+tensorboard/
+events.out.tfevents.*
+*.zip

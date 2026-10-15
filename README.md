@@ -1,44 +1,104 @@
 # Bottle-Dynamics
 
-A custom, physics-based reinforcement learning environment for bottle-flip control.
+A small custom bottle-flip environment using Gymnasium, Pymunk, and Stable-Baselines3.
 
-## Overview
+## Environment
 
-Bottle-Dynamics explores how reinforcement learning agents can learn to execute bottle flips and achieve stable, upright landings through trial and error.
+- The bottle is a rigid 2D rectangle standing in for an **empty reusable plastic bottle**.
+- Bottle mass is an initial estimate of **0.12 kg**, not a measured value.
+- The bottle swings from a pivot; the agent controls torque and chooses when to release.
+- After release, Pymunk simulates free flight and collisions with a **continuous ground surface**.
+- The green strip marks the target zone on the ground; it is not a separate floating platform.
+- Water/sloshing physics is disabled for this baseline.
 
-Using a 2D rigid-body physics simulation integrated with Gymnasium, the environment allows agents to learn launch strategies by controlling the forces and rotational impulses applied to a bottle.
+A success requires an upright, low-speed, stable landing in the target zone and enough rotation. Merely touching the floor does not count.
 
-The project investigates how different water-fill levels affect bottle dynamics and flipping performance, with experiments at **20%, 30%, and 40% water fill**.
+## Setup (Windows PowerShell)
 
-Trained agents will be evaluated across repeated trials, with model checkpoints saved at regular training intervals to identify the most reliable policies.
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
 
-A visualization interface will allow users to observe bottle trajectories, evaluate checkpoints, and compare reinforcement learning algorithms.
+## Files
 
-## Objectives
+Each algorithm folder has its own, self-contained `train.py` and `evaluate.py`, similar to a basic Stable-Baselines3 example. The scripts directly create or load the model, run episodes, print results, and write TensorBoard metrics. PPO, A2C, and SAC outputs are kept separate.
 
-- Develop a custom 2D physics simulation for bottle-flip dynamics.
-- Implement a Gymnasium environment with a continuous action space.
-- Train reinforcement learning agents to achieve stable, upright landings.
-- Investigate the effects of 20%, 30%, and 40% water levels.
-- Save and evaluate model checkpoints at configurable training intervals.
-- Compare algorithms using landing success rates, accuracy, and stability.
-- Build an interactive interface for visualizing flips and comparing results.
+```text
+PPO/
+  train.py
+  evaluate.py
+  runs/
+A2C/
+  train.py
+  evaluate.py
+  runs/
+SAC/
+  train.py
+  evaluate.py
+  runs/
+bottle_env.py
+```
 
-## Technology Stack
+## Train
 
-- Python — Core implementation
-- Gymnasium — Reinforcement learning environment
-- Pymunk — 2D rigid-body physics
-- Pygame — Visualization
-- Stable-Baselines3 — Reinforcement learning algorithms
-- TensorBoard — Training metrics and experiment monitoring
+The default training budget is 500,000 timesteps, with a checkpoint saved every 10,000 steps and seed 42. Start with a short smoke test:
 
-## Evaluation
+```powershell
+python PPO/train.py --timesteps 2000 --checkpoint-every 1000 --run-name test_run
+```
 
-Models will be evaluated across repeated episodes using metrics such as landing success rate, landing-angle error, residual angular velocity, and landing stability.
+For longer runs:
 
-Checkpoint comparisons will help identify reliable policies rather than automatically selecting the final training model.
+```powershell
+python PPO/train.py --timesteps 500000 --checkpoint-every 10000
+python A2C/train.py --timesteps 500000 --checkpoint-every 10000
+python SAC/train.py --timesteps 500000 --checkpoint-every 10000
+```
 
-## Project Status
+Each command performs one continuous training run. Checkpoints are saved while learning continues, followed by `final_model.zip`. For example, PPO writes to `PPO/runs/seed42/`, including:
 
-Under development.
+- `checkpoints/` — periodic model snapshots
+- `tensorboard/` — Stable-Baselines3 training metrics
+- `final_model.zip` — model saved at the end
+
+Use `--seed 123` or `--run-name experiment2` to create a different run. A script refuses to overwrite a non-empty run folder; choose a new name for a new experiment.
+
+## TensorBoard
+
+For example, to view PPO's training metrics:
+
+```powershell
+tensorboard --logdir PPO/runs/seed42/tensorboard
+```
+
+Open the local URL printed by TensorBoard. For A2C or SAC, use that algorithm's matching folder.
+
+## Evaluate
+
+By default, evaluation loads the final model and runs five episodes, following the same basic loop as the standalone A2C evaluation example:
+
+```powershell
+python PPO/evaluate.py --run-name seed42 --episodes 5
+```
+
+Each episode prints its reward, length, termination status, success flag, and outcome. The script writes summary results to `evaluation_results.csv` and evaluation metrics under `evaluation_tensorboard/` within that run folder.
+
+Evaluate all periodic checkpoints plus the final model:
+
+```powershell
+python PPO/evaluate.py --run-name seed42 --episodes 5 --all-checkpoints
+```
+
+Evaluate and replay one specific checkpoint (only one model can be rendered at a time):
+
+```powershell
+python PPO/evaluate.py --run-name seed42 --model PPO/runs/seed42/checkpoints/ppo_10000_steps.zip --episodes 1 --render
+```
+
+Use `A2C/evaluate.py` or `SAC/evaluate.py` for the other algorithms, with their matching run folders. Evaluation uses the same episode seeds across models to make comparisons more consistent.
+
+## Fair comparison
+
+Train PPO, A2C, and SAC using the same environment, timestep budget, and seed before comparing them. The older experiments used a different environment version, so their scores should be treated as historical baselines, not direct apples-to-apples comparisons.
