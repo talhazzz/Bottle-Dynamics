@@ -43,7 +43,7 @@ bottle_env.py
 
 ## Train
 
-The default training budget is 500,000 timesteps, with a checkpoint saved every 10,000 steps and seed 42. Start with a short smoke test:
+The default training budget is 500,000 timesteps, with a checkpoint saved every 25,000 steps and seed 42. Start with a short smoke test:
 
 ```powershell
 python PPO/train.py --timesteps 2000 --checkpoint-every 1000 --run-name test_run
@@ -52,9 +52,9 @@ python PPO/train.py --timesteps 2000 --checkpoint-every 1000 --run-name test_run
 For longer runs:
 
 ```powershell
-python PPO/train.py --timesteps 500000 --checkpoint-every 10000
-python A2C/train.py --timesteps 500000 --checkpoint-every 10000
-python SAC/train.py --timesteps 500000 --checkpoint-every 10000
+python PPO/train.py --timesteps 500000 --checkpoint-every 25000
+python A2C/train.py --timesteps 500000 --checkpoint-every 25000
+python SAC/train.py --timesteps 500000 --checkpoint-every 25000
 ```
 
 Each command performs one continuous training run. Checkpoints are saved while learning continues, followed by `final_model.zip`. For example, PPO writes to `PPO/runs/seed42/`, including:
@@ -77,7 +77,7 @@ Open the local URL printed by TensorBoard. For A2C or SAC, use that algorithm's 
 
 ## Evaluate
 
-By default, evaluation loads the final model and runs five episodes, following the same basic loop as the standalone A2C evaluation example:
+By default, evaluation loads the final model and runs five episodes:
 
 ```powershell
 python PPO/evaluate.py --run-name seed42 --episodes 5
